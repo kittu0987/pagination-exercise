@@ -1,131 +1,107 @@
-// Globals for pagination
-let currentPage = 0; // Current page index
-const pageSize = 5;  // Number of items per page
+const apiUrl = 'http://localhost:8080/api/kids';
+let currentPage = 0;
+const pageSize = 5;
 
-// Fetch data when the page loads
-document.addEventListener('DOMContentLoaded', () => {
-    fetchData(currentPage, pageSize);
-});
+document.getElementById('getDataBtn').addEventListener('click', () => fetchData(currentPage));
+document.getElementById('addDataBtn').addEventListener('click', showAddForm);
+document.getElementById('prevPage').addEventListener('click', () => fetchData(--currentPage));
+document.getElementById('nextPage').addEventListener('click', () => fetchData(++currentPage));
+document.getElementById('cancelBtn').addEventListener('click', () => toggleForm(false));
 
-// Fetch data with pagination
-function fetchData(page, size) {
-    const url = `http://localhost:8080/api/kids?page=${page}&size=${size}`;
+const kidTableBody = document.querySelector('#kidTable tbody');
+const formContainer = document.getElementById('formContainer');
+const kidForm = document.getElementById('kidForm');
 
-    fetch(url)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Failed to fetch: ${response.statusText}`);
-            }
-            return response.json();
-        })
+function fetchData(page) {
+    fetch(`${apiUrl}?page=${page}&size=${pageSize}`)
+        .then(response => response.json())
         .then(data => {
-            console.log('Fetched data:', data);
-            displayData(data.content); // Show data in table
+            populateTable(data.content);
+            updatePagination(data.number, data.totalPages);
         })
-        .catch(error => {
-            console.error('Error fetching data:', error);
-            alert('Error fetching data. Please check the console.');
-        });
+        .catch(error => console.error('Fetch error:', error));
 }
 
-// Display data in table
-function displayData(kids) {
-    const tableBody = document.getElementById('tableBody');
-    tableBody.innerHTML = ''; // Clear old rows
-
+function populateTable(kids) {
+    kidTableBody.innerHTML = '';
     kids.forEach(kid => {
-        const row = `
-            <tr>
-                <td>${kid.id}</td>
-                <td>${kid.kidName}</td>
-                <td>${kid.school}</td>
-                <td>${kid.likes}</td>
-                <td>
-                    <button onclick="editKid(${kid.id}, '${kid.kidName}', '${kid.school}', ${kid.likes})">Edit</button>
-                    <button onclick="deleteKid(${kid.id})">Delete</button>
-                </td>
-            </tr>
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${kid.id}</td>
+            <td>${kid.kidName}</td>
+            <td>${kid.kidProfilePath}</td>
+            <td>${kid.school}</td>
+            <td>${kid.likes}</td>
+            <td>${kid.filename}</td>
+            <td>
+                <button onclick="editKid(${kid.id})">Edit</button>
+                <button onclick="deleteKid(${kid.id})">Delete</button>
+            </td>
         `;
-        tableBody.innerHTML += row;
+        kidTableBody.appendChild(row);
     });
 }
 
-// Add new kid data
-document.getElementById('addKidForm').addEventListener('submit', event => {
-    event.preventDefault();
+function updatePagination(page, totalPages) {
+    currentPage = page;
+    document.getElementById('currentPage').innerText = page + 1;
+    document.getElementById('prevPage').disabled = page === 0;
+    document.getElementById('nextPage').disabled = page === totalPages - 1;
+}
 
-    const kidName = document.getElementById('kidName').value;
-    const school = document.getElementById('school').value;
-    const likes = document.getElementById('likes').value;
+function showAddForm() {
+    kidForm.reset();
+    document.getElementById('formTitle').innerText = 'Add Kid Data';
+    toggleForm(true);
+}
 
-    const kidData = { kidName, school, likes };
-
-    fetch('http://localhost:8080/api/kids', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(kidData),
-    })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to add kid');
-            }
-            alert('Kid added successfully!');
-            fetchData(currentPage, pageSize); // Refresh table
-        })
-        .catch(error => {
-            console.error('Error adding kid:', error);
-            alert('Error adding kid. Check console.');
-        });
-
-    // Clear form fields
-    document.getElementById('addKidForm').reset();
-});
-
-// Delete kid data
-function deleteKid(id) {
-    const url = `http://localhost:8080/api/kids/${id}`;
-    fetch(url, { method: 'DELETE' })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Failed to delete: ${response.statusText}`);
-            }
-            alert('Kid deleted successfully!');
-            fetchData(currentPage, pageSize); // Refresh table
-        })
-        .catch(error => {
-            console.error('Error deleting kid:', error);
-            alert('Error deleting kid. Check console.');
+function editKid(id) {
+    fetch(`${apiUrl}/${id}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('kidId').value = data.id;
+            document.getElementById('kidName').value = data.kidName;
+            document.getElementById('kidProfilePath').value = data.kidProfilePath;
+            document.getElementById('school').value = data.school;
+            document.getElementById('likes').value = data.likes;
+            document.getElementById('filename').value = data.filename;
+            document.getElementById('formTitle').innerText = 'Edit Kid Data';
+            toggleForm(true);
         });
 }
 
-// Edit kid data
-function editKid(id, currentName, currentSchool, currentLikes) {
-    const newName = prompt('Enter new name:', currentName);
-    const newSchool = prompt('Enter new school:', currentSchool);
-    const newLikes = prompt('Enter new likes:', currentLikes);
+function deleteKid(id) {
+    fetch(`${apiUrl}/${id}`, { method: 'DELETE' })
+        .then(() => fetchData(currentPage))
+        .catch(error => console.error('Delete error:', error));
+}
 
-    if (newName && newSchool && newLikes) {
-        const updatedKid = { kidName: newName, school: newSchool, likes: parseInt(newLikes, 10) };
+kidForm.addEventListener('submit', event => {
+    event.preventDefault();
+    const id = document.getElementById('kidId').value;
+    const kidData = {
+        kidName: document.getElementById('kidName').value,
+        kidProfilePath: document.getElementById('kidProfilePath').value,
+        school: document.getElementById('school').value,
+        likes: parseInt(document.getElementById('likes').value),
+        filename: document.getElementById('filename').value
+    };
 
-        fetch(`http://localhost:8080/api/kids/${id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(updatedKid),
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? `${apiUrl}/${id}` : apiUrl;
+
+    fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(kidData)
+    })
+        .then(() => {
+            fetchData(currentPage);
+            toggleForm(false);
         })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Failed to update kid');
-                }
-                alert('Kid updated successfully!');
-                fetchData(currentPage, pageSize); // Refresh table
-            })
-            .catch(error => {
-                console.error('Error updating kid:', error);
-                alert('Error updating kid. Check console.');
-            });
-    }
+        .catch(error => console.error('Save error:', error));
+});
+
+function toggleForm(show) {
+    formContainer.style.display = show ? 'block' : 'none';
 }
